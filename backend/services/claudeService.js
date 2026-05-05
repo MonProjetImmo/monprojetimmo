@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
 const googleSheetsService = require('./googleSheetsService');
 const scrapeService = require('./scrapeService');
 
@@ -46,6 +47,7 @@ TU PEUX :
 3. Analyser des annonces immobilières depuis des URLs pour créer du contenu marketing
 4. Proposer des stratégies de contenu adaptées aux saisons (printemps = jardin/piscine, été = terrasse/barbecue, etc.)
 5. Répondre à toutes questions sur la stratégie social media immobilière
+6. Publier directement un post sur Instagram via l'outil publish_instagram — utilise-le dès que tu as généré une légende et que l'utilisateur fournit une URL d'image
 
 IMPORTANT : Utilise toujours les outils disponibles pour accéder aux données réelles. Réponds toujours en français.`;
 
@@ -112,6 +114,24 @@ const tools = [
     }
   },
   {
+    name: "publish_instagram",
+    description: "Publie un post sur Instagram via l'API Graph de Facebook. Requiert une URL d'image publiquement accessible et une légende (caption) avec hashtags. Retourne l'ID du post publié en cas de succès.",
+    input_schema: {
+      type: "object",
+      properties: {
+        image_url: {
+          type: "string",
+          description: "URL publique et accessible de l'image à publier sur Instagram"
+        },
+        caption: {
+          type: "string",
+          description: "Légende complète du post avec emojis et hashtags, prête à publier"
+        }
+      },
+      required: ["image_url", "caption"]
+    }
+  },
+  {
     name: "scrape_listing_url",
     description: "Lit et extrait le contenu d'une annonce immobilière depuis une URL (SeLoger, LeBonCoin, PAP, Logic-Immo, etc.) pour créer du contenu marketing.",
     input_schema: {
@@ -133,6 +153,19 @@ async function executeToolCall(toolName, toolInput) {
       return await googleSheetsService.readCalendar(toolInput.range);
     case "update_editorial_calendar":
       return await googleSheetsService.updateCalendar(toolInput);
+    case "publish_instagram": {
+      const GRAPH_URL = 'https://graph.facebook.com/v19.0';
+      const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+      const userId = process.env.INSTAGRAM_USER_ID;
+      if (!accessToken || !userId) throw new Error('Instagram credentials not configured');
+      const container = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
+        params: { image_url: toolInput.image_url, caption: toolInput.caption, access_token: accessToken }
+      });
+      const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
+        params: { creation_id: container.data.id, access_token: accessToken }
+      });
+      return { success: true, postId: publish.data.id };
+    }
     case "scrape_listing_url":
       return await scrapeService.scrapeUrl(toolInput.url);
     default:
