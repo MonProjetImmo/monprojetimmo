@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { postsAPI } from '../api/index.js';
+import api from '../api/index.js';
 
 const PLATFORMS = ['Instagram', 'Facebook', 'TikTok'];
 const CONTENT_TYPES = [
@@ -32,6 +33,8 @@ export default function PostGenerator({ onPreview }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishStatus, setPublishStatus] = useState(null);
 
   function updateForm(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -57,6 +60,20 @@ export default function PostGenerator({ onPreview }) {
       setError(err.response?.data?.error || 'Erreur lors de la génération');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePublishInstagram() {
+    setPublishing(true);
+    setPublishStatus(null);
+    try {
+      await api.post('/publish/instagram', { caption: result, imageUrl: '' });
+      setPublishStatus({ ok: true, message: 'Post publié sur Instagram !' });
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.response?.data?.error || 'Erreur de publication';
+      setPublishStatus({ ok: false, message: detail });
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -183,9 +200,24 @@ export default function PostGenerator({ onPreview }) {
                       Prévisualiser
                     </button>
                   )}
+                  {form.platform === 'Instagram' && (
+                    <button
+                      onClick={handlePublishInstagram}
+                      disabled={publishing}
+                      className="btn btn-sm"
+                      style={styles.igBtn}
+                    >
+                      {publishing ? 'Publication...' : 'Publier sur Instagram'}
+                    </button>
+                  )}
                 </div>
               </div>
               <pre style={styles.resultText}>{result}</pre>
+              {publishStatus && (
+                <div style={{ ...styles.publishBanner, background: publishStatus.ok ? '#e8f5e9' : '#ffebee', color: publishStatus.ok ? '#2e7d32' : '#c62828', borderColor: publishStatus.ok ? '#c8e6c9' : '#ffcdd2' }}>
+                  {publishStatus.message}
+                </div>
+              )}
             </div>
           )}
 
@@ -271,7 +303,21 @@ const styles = {
     color: '#9aa3bc',
     textAlign: 'center'
   },
-  placeholderIcon: { fontSize: '3rem', marginBottom: '12px' }
+  placeholderIcon: { fontSize: '3rem', marginBottom: '12px' },
+  igBtn: {
+    background: '#e1306c',
+    color: '#fff',
+    border: 'none',
+    fontWeight: 600
+  },
+  publishBanner: {
+    marginTop: '12px',
+    padding: '10px 14px',
+    borderRadius: '8px',
+    border: '1px solid',
+    fontSize: '0.88rem',
+    fontWeight: 500
+  }
 };
 
 const spinStyle = document.createElement('style');
