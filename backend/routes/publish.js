@@ -4,6 +4,8 @@ const authenticateToken = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+console.log('[publish] MAKE_WEBHOOK_URL:', process.env.MAKE_WEBHOOK_URL ? process.env.MAKE_WEBHOOK_URL.slice(0, 10) + '…' : 'undefined');
+
 // POST /publish/instagram
 // body: { imageUrl, caption }
 router.post('/instagram', authenticateToken, async (req, res) => {
