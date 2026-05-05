@@ -34,6 +34,10 @@ export const postsAPI = {
   generate: (data) => api.post('/posts/generate', data)
 };
 
+export const publishAPI = {
+  instagram: (imageUrl, caption) => api.post('/publish/instagram', { imageUrl, caption })
+};
+
 export const calendarAPI = {
   getAll: () => api.get('/calendar'),
   create: (entry) => api.post('/calendar', entry),

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { agentAPI } from '../api/index.js';
+import { agentAPI, publishAPI } from '../api/index.js';
 
 const SUGGESTIONS = [
   'Crée un post Instagram pour une villa avec piscine à Salon-de-Provence',
@@ -18,6 +18,7 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [toolActivity, setToolActivity] = useState(null);
+  const [publishStates, setPublishStates] = useState({});
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -62,6 +63,23 @@ export default function Chat() {
     setToolActivity(null);
   }
 
+  function setPubState(index, state) {
+    setPublishStates((prev) => ({ ...prev, [index]: state }));
+  }
+
+  async function confirmPublish(index, caption) {
+    const imageUrl = publishStates[index]?.imageUrl?.trim();
+    if (!imageUrl) return;
+    setPubState(index, { status: 'loading', imageUrl });
+    try {
+      await publishAPI.instagram(imageUrl, caption);
+      setPubState(index, { status: 'success' });
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.response?.data?.error || err.message;
+      setPubState(index, { status: 'error', detail, imageUrl });
+    }
+  }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -85,12 +103,53 @@ export default function Chat() {
         {messages.map((msg, i) => (
           <div key={i} style={{ ...styles.messageRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'assistant' && <div style={styles.avatar}>🤖</div>}
-            <div style={{
-              ...styles.bubble,
-              ...(msg.role === 'user' ? styles.userBubble : styles.aiBubble),
-              ...(msg.error ? styles.errorBubble : {})
-            }}>
-              <MessageContent content={msg.content} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '75%' }}>
+              <div style={{
+                ...styles.bubble,
+                maxWidth: '100%',
+                ...(msg.role === 'user' ? styles.userBubble : styles.aiBubble),
+                ...(msg.error ? styles.errorBubble : {})
+              }}>
+                <MessageContent content={msg.content} />
+              </div>
+              {msg.role === 'assistant' && isInstagramPost(msg.content) && (() => {
+                const pub = publishStates[i];
+                if (pub?.status === 'success') {
+                  return <div style={styles.pubSuccess}>✅ Publié sur Instagram !</div>;
+                }
+                if (pub?.status === 'prompting' || pub?.status === 'error' || pub?.status === 'loading') {
+                  return (
+                    <div style={styles.pubForm}>
+                      <input
+                        type="url"
+                        placeholder="URL de l'image (requis)"
+                        value={pub.imageUrl ?? ''}
+                        onChange={(e) => setPubState(i, { ...pub, imageUrl: e.target.value })}
+                        style={styles.pubInput}
+                        disabled={pub.status === 'loading'}
+                      />
+                      <button
+                        onClick={() => confirmPublish(i, msg.content)}
+                        disabled={!pub.imageUrl?.trim() || pub.status === 'loading'}
+                        style={styles.pubConfirm}
+                      >
+                        {pub.status === 'loading' ? '…' : 'Confirmer'}
+                      </button>
+                      {pub.status === 'error' && (
+                        <div style={styles.pubError}>{pub.detail}</div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    onClick={() => setPubState(i, { status: 'prompting', imageUrl: '' })}
+                    style={styles.pubButton}
+                  >
+                    📸 Publier sur Instagram
+                  </button>
+                );
+              })()}
             </div>
           </div>
         ))}
@@ -142,6 +201,10 @@ export default function Chat() {
       </div>
     </div>
   );
+}
+
+function isInstagramPost(content) {
+  return /instagram/i.test(content) && /#\w+/.test(content);
 }
 
 function MessageContent({ content }) {
@@ -242,6 +305,52 @@ const styles = {
     cursor: 'pointer',
     color: '#1a2744',
     transition: 'all 0.15s'
+  },
+  pubButton: {
+    alignSelf: 'flex-start',
+    padding: '7px 14px',
+    background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '20px',
+    fontSize: '0.82rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    letterSpacing: '0.02em'
+  },
+  pubForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    alignSelf: 'flex-start',
+    width: '100%'
+  },
+  pubInput: {
+    padding: '7px 10px',
+    border: '1px solid #e2e6f0',
+    borderRadius: '8px',
+    fontSize: '0.83rem',
+    outline: 'none',
+    fontFamily: 'inherit'
+  },
+  pubConfirm: {
+    alignSelf: 'flex-start',
+    padding: '6px 16px',
+    background: '#1a2744',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '0.82rem',
+    cursor: 'pointer'
+  },
+  pubSuccess: {
+    fontSize: '0.83rem',
+    color: '#2e7d32',
+    fontWeight: 600
+  },
+  pubError: {
+    fontSize: '0.78rem',
+    color: '#c62828'
   },
   inputArea: {
     display: 'flex',
