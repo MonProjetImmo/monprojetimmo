@@ -1,5 +1,8 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "rewrites": [{"source": "/(.*)", "destination": "/index.html"}]
+  "rewrites": [
+    {"source": "/api/:path*", "destination": "https://monprojetimmo-production.up.railway.app/api/:path*"},
+    {"source": "/(.*)", "destination": "/index.html"}
+  ]
 }
