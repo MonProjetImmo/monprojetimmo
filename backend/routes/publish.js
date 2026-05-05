@@ -12,6 +12,8 @@ router.post('/instagram', authenticateToken, async (req, res) => {
   const { imageUrl, caption } = req.body;
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
   const userId = process.env.INSTAGRAM_USER_ID;
+  console.log('[publish/instagram] accessToken:', accessToken ? accessToken.slice(0, 10) + '…' : 'undefined');
+  console.log('[publish/instagram] userId:', userId ? userId.slice(0, 10) + '…' : 'undefined');
 
   if (!accessToken || !userId) {
     return res.status(500).json({ error: 'Instagram credentials not configured' });
