@@ -45,34 +45,31 @@ TU PEUX :
 1. Générer des posts optimisés pour chaque plateforme avec hashtags et CTA
 2. Lire et modifier le calendrier éditorial Google Sheets
 3. Analyser des annonces immobilières depuis des URLs pour créer du contenu marketing
-4. Proposer des stratégies de contenu adaptées aux saisons (printemps = jardin/piscine, été = terrasse/barbecue, etc.)
+4. Proposer des stratégies de contenu adaptées aux saisons
 5. Répondre à toutes questions sur la stratégie social media immobilière
-6. Publier directement un post photo sur Instagram via l'outil publish_instagram — utilise-le dès que tu as généré une légende et que l'utilisateur fournit une URL d'image
-7. Publier un carrousel multi-images sur Instagram via l'outil publish_instagram_carousel — utilise-le quand l'utilisateur fournit plusieurs URLs d'images (2 à 10 photos)
+6. Publier un post photo sur Instagram ET Facebook simultanément via publish_instagram — utilise-le dès que tu as une légende et une URL d'image
+7. Publier un carrousel multi-images sur Instagram via publish_instagram_carousel — utilise-le quand l'utilisateur fournit plusieurs URLs d'images (2 à 10 photos)
 
 IMPORTANT : Utilise toujours les outils disponibles pour accéder aux données réelles. Réponds toujours en français.`;
 
 const tools = [
   {
     name: "read_editorial_calendar",
-    description: "Lit le calendrier éditorial depuis Google Sheets. Retourne toutes les entrées planifiées avec leurs dates, plateformes, sujets et statuts.",
+    description: "Lit le calendrier éditorial depuis Google Sheets.",
     input_schema: {
       type: "object",
       properties: {
-        range: {
-          type: "string",
-          description: "Plage de cellules optionnelle (ex: 'Calendrier!A1:H50'). Laisser vide pour lire toute la feuille."
-        }
+        range: { type: "string", description: "Plage de cellules optionnelle" }
       }
     }
   },
   {
     name: "update_editorial_calendar",
-    description: "Ajoute ou modifie une entrée dans le calendrier éditorial Google Sheets. Utiliser 'row' pour modifier une entrée existante, omettre pour en ajouter une nouvelle.",
+    description: "Ajoute ou modifie une entrée dans le calendrier éditorial Google Sheets.",
     input_schema: {
       type: "object",
       properties: {
-        date: { type: "string", description: "Date de publication au format DD/MM/YYYY" },
+        date: { type: "string", description: "Date au format DD/MM/YYYY" },
         platform: { type: "string", enum: ["Instagram", "Facebook", "TikTok"] },
         content_type: { type: "string" },
         topic: { type: "string" },
@@ -87,7 +84,7 @@ const tools = [
   },
   {
     name: "publish_instagram",
-    description: "Publie un post sur Instagram via l'API Graph de Facebook. Requiert une URL d'image publiquement accessible et une légende (caption) avec hashtags.",
+    description: "Publie un post photo sur Instagram ET Facebook simultanément via Make. Réhéberge automatiquement l'image sur Cloudinary si nécessaire. Utiliser pour les posts avec une seule image.",
     input_schema: {
       type: "object",
       properties: {
@@ -167,11 +164,7 @@ async function executeToolCall(toolName, toolInput) {
       return await googleSheetsService.updateCalendar(toolInput);
 
     case "publish_instagram": {
-      const GRAPH_URL = 'https://graph.facebook.com/v19.0';
-      const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
-      const userId = process.env.INSTAGRAM_USER_ID;
-      if (!accessToken || !userId) throw new Error('Instagram credentials not configured');
-
+      // Réhéberger l'image sur Cloudinary
       let finalImageUrl = toolInput.image_url;
       try {
         finalImageUrl = await reHostOnCloudinary(toolInput.image_url);
@@ -179,15 +172,17 @@ async function executeToolCall(toolName, toolInput) {
         console.error('[claudeService] Cloudinary échoué, tentative avec URL originale:', err.message);
       }
 
-      console.log('[claudeService] Publication Instagram:', finalImageUrl.slice(0, 80) + '…');
+      // Appeler le webhook Make → publie sur Instagram + Facebook
+      const makeWebhookUrl = process.env.MAKE_WEBHOOK_URL || 'https://hook.eu1.make.com/fnqvbroshest7eoiwh5vkba3u6fumppf';
+      console.log('[claudeService] Envoi vers Make webhook:', finalImageUrl.slice(0, 80) + '…');
 
-      const container = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
-        params: { image_url: finalImageUrl, caption: toolInput.caption, access_token: accessToken }
-      });
-      const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
-        params: { creation_id: container.data.id, access_token: accessToken }
-      });
-      return { success: true, postId: publish.data.id };
+      const makeRes = await axios.post(makeWebhookUrl, {
+        imageUrl: finalImageUrl,
+        caption: toolInput.caption
+      }, { timeout: 15000 });
+
+      console.log('[claudeService] Make réponse:', makeRes.data);
+      return { success: true, makeResponse: makeRes.data, platforms: ['Instagram', 'Facebook'] };
     }
 
     case "publish_instagram_carousel": {
