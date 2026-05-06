@@ -306,9 +306,8 @@ async function chat(userMessages, conversationHistory = []) {
   const allMessages = [...conversationHistory, ...userMessages];
 
   let response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-sonnet-4-5",
     max_tokens: 4096,
-    thinking: { type: "adaptive" },
     system: [
       {
         type: "text",
@@ -354,9 +353,8 @@ async function chat(userMessages, conversationHistory = []) {
     allMessages.push({ role: "user", content: toolResultContent });
 
     response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: "claude-sonnet-4-5",
       max_tokens: 4096,
-      thinking: { type: "adaptive" },
       system: [
         {
           type: "text",
@@ -404,6 +402,11 @@ Fournis :
 3. L'heure de publication optimale
 4. Description du visuel idéal (photo/vidéo à créer)
 5. Conseils pour maximiser l'engagement`;
+
+  return await chat([{ role: "user", content: prompt }]);
+}
+
+module.exports = { chat, generatePost };
 
   return await chat([{ role: "user", content: prompt }]);
 }
