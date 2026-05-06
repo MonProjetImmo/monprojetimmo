@@ -32,8 +32,7 @@ export default function ImageUploader({ onImagesUploaded }) {
     const formData = new FormData();
     formData.append("file", fileObj.file);
     formData.append("upload_preset", UPLOAD_PRESET);
-    formData.append("format", "jpg");
-    formData.append("quality", "auto");
+   
 
     const res = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
