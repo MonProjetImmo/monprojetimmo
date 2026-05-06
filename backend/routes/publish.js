@@ -11,6 +11,10 @@ console.log('[publish] Cloudinary cloud:', process.env.CLOUDINARY_CLOUD_NAME);
  * Réhéberge une image sur Cloudinary via upload par URL (preset Unsigned)
  */
 async function reHostOnCloudinary(imageUrl) {
+  if (imageUrl.includes('res.cloudinary.com')) {
+    console.log('[publish] Image déjà sur Cloudinary, skip');
+    return imageUrl;
+  }
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
   if (!cloudName) {
@@ -21,8 +25,6 @@ async function reHostOnCloudinary(imageUrl) {
   const formData = new URLSearchParams();
   formData.append('file', imageUrl);
   formData.append('upload_preset', 'monprojetimmo');
-  formData.append('format', 'jpg');
-  formData.append('quality', 'auto');
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
   console.log('[publish] Upload Cloudinary:', imageUrl.slice(0, 60) + '…');
