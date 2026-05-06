@@ -72,95 +72,54 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        date: {
-          type: "string",
-          description: "Date de publication au format DD/MM/YYYY (ex: 15/06/2025)"
-        },
-        platform: {
-          type: "string",
-          enum: ["Instagram", "Facebook", "TikTok"],
-          description: "Plateforme de publication"
-        },
-        content_type: {
-          type: "string",
-          description: "Type de contenu (ex: Annonce bien, Conseil achat, Actualité locale, Post engagement, Témoignage client)"
-        },
-        topic: {
-          type: "string",
-          description: "Sujet ou titre du post"
-        },
-        status: {
-          type: "string",
-          enum: ["Planifié", "En cours", "Publié", "Annulé"],
-          description: "Statut actuel du post"
-        },
-        content: {
-          type: "string",
-          description: "Texte complet du post (optionnel)"
-        },
-        notes: {
-          type: "string",
-          description: "Notes ou instructions pour la création visuelle (optionnel)"
-        },
-        time: {
-          type: "string",
-          description: "Heure de publication optimale (ex: 18h00)"
-        },
-        row: {
-          type: "number",
-          description: "Numéro de ligne à modifier (pour mises à jour). Omettre pour ajouter."
-        }
+        date: { type: "string", description: "Date de publication au format DD/MM/YYYY" },
+        platform: { type: "string", enum: ["Instagram", "Facebook", "TikTok"] },
+        content_type: { type: "string" },
+        topic: { type: "string" },
+        status: { type: "string", enum: ["Planifié", "En cours", "Publié", "Annulé"] },
+        content: { type: "string" },
+        notes: { type: "string" },
+        time: { type: "string" },
+        row: { type: "number" }
       },
       required: ["date", "platform", "content_type", "topic", "status"]
     }
   },
   {
     name: "publish_instagram",
-    description: "Publie un post sur Instagram via l'API Graph de Facebook. Requiert une URL d'image publiquement accessible et une légende (caption) avec hashtags. Retourne l'ID du post publié en cas de succès.",
+    description: "Publie un post sur Instagram via l'API Graph de Facebook. Requiert une URL d'image publiquement accessible et une légende (caption) avec hashtags.",
     input_schema: {
       type: "object",
       properties: {
-        image_url: {
-          type: "string",
-          description: "URL publique et accessible de l'image à publier sur Instagram"
-        },
-        caption: {
-          type: "string",
-          description: "Légende complète du post avec emojis et hashtags, prête à publier"
-        }
+        image_url: { type: "string", description: "URL publique de l'image" },
+        caption: { type: "string", description: "Légende complète avec emojis et hashtags" }
       },
       required: ["image_url", "caption"]
     }
   },
   {
     name: "publish_instagram_carousel",
-    description: "Publie un carrousel multi-images sur Instagram (2 à 10 photos). Réhéberge automatiquement les images sur Cloudinary avant publication. Utiliser quand l'utilisateur fournit plusieurs URLs d'images pour un même post.",
+    description: "Publie un carrousel multi-images sur Instagram (2 à 10 photos). Utiliser quand l'utilisateur fournit plusieurs URLs d'images.",
     input_schema: {
       type: "object",
       properties: {
         image_urls: {
           type: "array",
           items: { type: "string" },
-          description: "Liste de 2 à 10 URLs publiques des images à inclure dans le carrousel (dans l'ordre souhaité)"
+          description: "Liste de 2 à 10 URLs d'images dans l'ordre souhaité"
         },
-        caption: {
-          type: "string",
-          description: "Légende complète du carrousel avec emojis et hashtags, prête à publier"
-        }
+        caption: { type: "string", description: "Légende complète avec emojis et hashtags" }
       },
       required: ["image_urls", "caption"]
     }
   },
   {
     name: "scrape_listing_url",
-    description: "Lit et extrait le contenu d'une annonce immobilière depuis une URL (SeLoger, LeBonCoin, PAP, Logic-Immo, etc.) pour créer du contenu marketing.",
+    description: "Lit et extrait le contenu d'une annonce immobilière depuis une URL.",
     input_schema: {
       type: "object",
       properties: {
-        url: {
-          type: "string",
-          description: "URL complète de l'annonce immobilière"
-        }
+        url: { type: "string", description: "URL complète de l'annonce" }
       },
       required: ["url"]
     }
@@ -169,14 +128,15 @@ const tools = [
 
 /**
  * Réhéberge une image sur Cloudinary via upload par URL (preset Unsigned)
+ * Si l'image est déjà sur Cloudinary, retourne l'URL telle quelle.
  */
 async function reHostOnCloudinary(imageUrl) {
-if (imageUrl.includes('res.cloudinary.com')) {
+  if (imageUrl.includes('res.cloudinary.com')) {
     console.log('[claudeService] Image déjà sur Cloudinary, skip');
     return imageUrl;
   }
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   if (!cloudName) {
     console.warn('[claudeService] CLOUDINARY_CLOUD_NAME manquant, URL originale utilisée');
     return imageUrl;
@@ -185,7 +145,6 @@ if (imageUrl.includes('res.cloudinary.com')) {
   const formData = new URLSearchParams();
   formData.append('file', imageUrl);
   formData.append('upload_preset', 'monprojetimmo');
-
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
   console.log('[claudeService] Upload Cloudinary:', imageUrl.slice(0, 60) + '…');
@@ -241,6 +200,7 @@ async function executeToolCall(toolName, toolInput) {
         throw new Error('Un carrousel nécessite au moins 2 images');
       }
 
+      // Étape 1 : Réhéberger les images
       console.log(`[claudeService] Carrousel : réhébergement de ${toolInput.image_urls.length} images…`);
       const finalUrls = await Promise.all(
         toolInput.image_urls.map(async (url) => {
@@ -253,6 +213,7 @@ async function executeToolCall(toolName, toolInput) {
         })
       );
 
+      // Étape 2 : Créer un container pour chaque image
       const containerIds = [];
       for (const imageUrl of finalUrls) {
         const containerRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
@@ -262,20 +223,36 @@ async function executeToolCall(toolName, toolInput) {
         console.log('[claudeService] Container créé:', containerRes.data.id);
       }
 
-      const carouselRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
-        params: {
-          media_type: 'CAROUSEL',
-          children: containerIds.join(','),
-          caption: toolInput.caption,
-          access_token: accessToken
-        }
-      });
+      // Étape 3 : Créer le container carrousel
+      console.log('[claudeService] Création container carrousel avec IDs:', containerIds);
+      let carouselRes;
+      try {
+        carouselRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
+          params: {
+            media_type: 'CAROUSEL',
+            children: containerIds.join(','),
+            caption: toolInput.caption,
+            access_token: accessToken
+          }
+        });
+        console.log('[claudeService] Container carrousel créé:', carouselRes.data.id);
+      } catch (err) {
+        console.error('[claudeService] Erreur container carrousel:', JSON.stringify(err.response?.data) || err.message);
+        throw new Error(`Erreur création carrousel: ${JSON.stringify(err.response?.data) || err.message}`);
+      }
 
-      const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
-        params: { creation_id: carouselRes.data.id, access_token: accessToken }
-      });
+      // Étape 4 : Publier le carrousel
+      let publish;
+      try {
+        publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
+          params: { creation_id: carouselRes.data.id, access_token: accessToken }
+        });
+        console.log('[claudeService] Carrousel publié:', publish.data.id);
+      } catch (err) {
+        console.error('[claudeService] Erreur publication carrousel:', JSON.stringify(err.response?.data) || err.message);
+        throw new Error(`Erreur publication carrousel: ${JSON.stringify(err.response?.data) || err.message}`);
+      }
 
-      console.log('[claudeService] Carrousel publié:', publish.data.id);
       return { success: true, postId: publish.data.id, type: 'carousel', slides: finalUrls.length };
     }
 
