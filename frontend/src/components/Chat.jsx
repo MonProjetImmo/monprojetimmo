@@ -21,7 +21,7 @@ export default function Chat() {
   const [publishStates, setPublishStates] = useState({});
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
-
+  const [showUploader, setShowUploader] = useState(false);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -98,7 +98,20 @@ export default function Chat() {
           Nouvelle conversation
         </button>
       </header>
-<ImageUploader onImagesUploaded={(urls) => {}} />
+<button onClick={() => setShowUploader(!showUploader)} style={{
+  background: showUploader ? 'rgba(200,169,110,0.2)' : 'rgba(255,255,255,0.05)',
+  border: '1px solid rgba(200,169,110,0.3)',
+  borderRadius: '8px',
+  padding: '6px 14px',
+  fontSize: '12px',
+  color: '#c8a96e',
+  cursor: 'pointer',
+  margin: '8px 16px',
+  fontFamily: 'monospace'
+}}>
+  {showUploader ? '✕ Fermer l\'upload' : '📸 Uploader des photos'}
+</button>
+{showUploader && <ImageUploader onImagesUploaded={(urls) => {}} />}
       <div style={styles.messages}>
         {messages.map((msg, i) => (
           <div key={i} style={{ ...styles.messageRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
