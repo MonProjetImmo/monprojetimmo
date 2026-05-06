@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { agentAPI, publishAPI } from '../api/index.js';
-
+import ImageUploader from './ImageUploader';
 const SUGGESTIONS = [
   'Crée un post Instagram pour une villa avec piscine à Salon-de-Provence',
   'Montre-moi le calendrier éditorial de la semaine',
@@ -98,7 +98,7 @@ export default function Chat() {
           Nouvelle conversation
         </button>
       </header>
-
+<ImageUploader onImagesUploaded={(urls) => {}} />
       <div style={styles.messages}>
         {messages.map((msg, i) => (
           <div key={i} style={{ ...styles.messageRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
