@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
+const crypto = require('crypto');
 const googleSheetsService = require('./googleSheetsService');
 const scrapeService = require('./scrapeService');
 
@@ -147,6 +148,45 @@ const tools = [
   }
 ];
 
+/**
+ * Réhéberge une image sur Cloudinary via upload par URL
+ * Retourne l'URL publique Cloudinary (HTTPS, JPEG garanti)
+ */
+async function reHostOnCloudinary(imageUrl) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    console.warn('[claudeService] Variables Cloudinary manquantes, URL originale utilisée');
+    return imageUrl;
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const str = `timestamp=${timestamp}&upload_preset=monprojetimmo${apiSecret}`;
+  const signature = crypto.createHash('sha256').update(str).digest('hex');
+
+  const formData = new URLSearchParams();
+  formData.append('file', imageUrl);
+  formData.append('upload_preset', 'monprojetimmo');
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp);
+  formData.append('signature', signature);
+  formData.append('format', 'jpg');
+  formData.append('quality', 'auto');
+
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  console.log('[claudeService] Upload Cloudinary:', imageUrl.slice(0, 60) + '…');
+
+  const response = await axios.post(uploadUrl, formData.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 30000,
+  });
+
+  console.log('[claudeService] Cloudinary URL:', response.data.secure_url);
+  return response.data.secure_url;
+}
+
 async function executeToolCall(toolName, toolInput) {
   switch (toolName) {
     case "read_editorial_calendar":
@@ -158,8 +198,19 @@ async function executeToolCall(toolName, toolInput) {
       const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
       const userId = process.env.INSTAGRAM_USER_ID;
       if (!accessToken || !userId) throw new Error('Instagram credentials not configured');
+
+      // Réhéberger l'image sur Cloudinary avant de publier
+      let finalImageUrl = toolInput.image_url;
+      try {
+        finalImageUrl = await reHostOnCloudinary(toolInput.image_url);
+      } catch (err) {
+        console.error('[claudeService] Cloudinary échoué, tentative avec URL originale:', err.message);
+      }
+
+      console.log('[claudeService] Publication Instagram avec URL:', finalImageUrl.slice(0, 80) + '…');
+
       const container = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
-        params: { image_url: toolInput.image_url, caption: toolInput.caption, access_token: accessToken }
+        params: { image_url: finalImageUrl, caption: toolInput.caption, access_token: accessToken }
       });
       const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
         params: { creation_id: container.data.id, access_token: accessToken }
