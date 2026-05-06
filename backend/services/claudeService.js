@@ -1,6 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
-const crypto = require('crypto');
 const googleSheetsService = require('./googleSheetsService');
 const scrapeService = require('./scrapeService');
 
@@ -169,29 +168,19 @@ const tools = [
 ];
 
 /**
- * Réhéberge une image sur Cloudinary via upload par URL
- * Retourne l'URL publique Cloudinary (HTTPS, JPEG garanti)
+ * Réhéberge une image sur Cloudinary via upload par URL (preset Unsigned)
  */
 async function reHostOnCloudinary(imageUrl) {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
-  if (!cloudName || !apiKey || !apiSecret) {
-    console.warn('[claudeService] Variables Cloudinary manquantes, URL originale utilisée');
+  if (!cloudName) {
+    console.warn('[claudeService] CLOUDINARY_CLOUD_NAME manquant, URL originale utilisée');
     return imageUrl;
   }
-
-  const timestamp = Math.floor(Date.now() / 1000);
-  const str = `timestamp=${timestamp}&upload_preset=monprojetimmo${apiSecret}`;
-  const signature = crypto.createHash('sha256').update(str).digest('hex');
 
   const formData = new URLSearchParams();
   formData.append('file', imageUrl);
   formData.append('upload_preset', 'monprojetimmo');
-  formData.append('api_key', apiKey);
-  formData.append('timestamp', timestamp);
-  formData.append('signature', signature);
   formData.append('format', 'jpg');
   formData.append('quality', 'auto');
 
@@ -211,15 +200,16 @@ async function executeToolCall(toolName, toolInput) {
   switch (toolName) {
     case "read_editorial_calendar":
       return await googleSheetsService.readCalendar(toolInput.range);
+
     case "update_editorial_calendar":
       return await googleSheetsService.updateCalendar(toolInput);
+
     case "publish_instagram": {
       const GRAPH_URL = 'https://graph.facebook.com/v19.0';
       const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
       const userId = process.env.INSTAGRAM_USER_ID;
       if (!accessToken || !userId) throw new Error('Instagram credentials not configured');
 
-      // Réhéberger l'image sur Cloudinary avant de publier
       let finalImageUrl = toolInput.image_url;
       try {
         finalImageUrl = await reHostOnCloudinary(toolInput.image_url);
@@ -227,7 +217,7 @@ async function executeToolCall(toolName, toolInput) {
         console.error('[claudeService] Cloudinary échoué, tentative avec URL originale:', err.message);
       }
 
-      console.log('[claudeService] Publication Instagram avec URL:', finalImageUrl.slice(0, 80) + '…');
+      console.log('[claudeService] Publication Instagram:', finalImageUrl.slice(0, 80) + '…');
 
       const container = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
         params: { image_url: finalImageUrl, caption: toolInput.caption, access_token: accessToken }
@@ -237,6 +227,7 @@ async function executeToolCall(toolName, toolInput) {
       });
       return { success: true, postId: publish.data.id };
     }
+
     case "publish_instagram_carousel": {
       const GRAPH_URL = 'https://graph.facebook.com/v19.0';
       const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
@@ -247,7 +238,6 @@ async function executeToolCall(toolName, toolInput) {
         throw new Error('Un carrousel nécessite au moins 2 images');
       }
 
-      // Réhéberger toutes les images sur Cloudinary
       console.log(`[claudeService] Carrousel : réhébergement de ${toolInput.image_urls.length} images…`);
       const finalUrls = await Promise.all(
         toolInput.image_urls.map(async (url) => {
@@ -255,26 +245,20 @@ async function executeToolCall(toolName, toolInput) {
             return await reHostOnCloudinary(url);
           } catch (err) {
             console.error('[claudeService] Cloudinary échoué pour', url, ':', err.message);
-            return url; // fallback URL originale
+            return url;
           }
         })
       );
 
-      // Créer un container pour chaque image
       const containerIds = [];
       for (const imageUrl of finalUrls) {
         const containerRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
-          params: {
-            image_url: imageUrl,
-            is_carousel_item: true,
-            access_token: accessToken
-          }
+          params: { image_url: imageUrl, is_carousel_item: true, access_token: accessToken }
         });
         containerIds.push(containerRes.data.id);
         console.log('[claudeService] Container créé:', containerRes.data.id);
       }
 
-      // Créer le container carrousel
       const carouselRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
         params: {
           media_type: 'CAROUSEL',
@@ -284,19 +268,17 @@ async function executeToolCall(toolName, toolInput) {
         }
       });
 
-      // Publier le carrousel
       const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
-        params: {
-          creation_id: carouselRes.data.id,
-          access_token: accessToken
-        }
+        params: { creation_id: carouselRes.data.id, access_token: accessToken }
       });
 
       console.log('[claudeService] Carrousel publié:', publish.data.id);
       return { success: true, postId: publish.data.id, type: 'carousel', slides: finalUrls.length };
     }
+
     case "scrape_listing_url":
       return await scrapeService.scrapeUrl(toolInput.url);
+
     default:
       return { error: `Outil inconnu: ${toolName}` };
   }
@@ -321,10 +303,8 @@ async function chat(userMessages, conversationHistory = []) {
 
   const toolResults = [];
 
-  // Agentic loop: handle tool calls until end_turn
   while (response.stop_reason === "tool_use") {
     const toolUseBlocks = response.content.filter(b => b.type === "tool_use");
-
     allMessages.push({ role: "assistant", content: response.content });
 
     const toolResultContent = [];
