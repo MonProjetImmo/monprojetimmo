@@ -48,7 +48,8 @@ TU PEUX :
 3. Analyser des annonces immobilières depuis des URLs pour créer du contenu marketing
 4. Proposer des stratégies de contenu adaptées aux saisons (printemps = jardin/piscine, été = terrasse/barbecue, etc.)
 5. Répondre à toutes questions sur la stratégie social media immobilière
-6. Publier directement un post sur Instagram via l'outil publish_instagram — utilise-le dès que tu as généré une légende et que l'utilisateur fournit une URL d'image
+6. Publier directement un post photo sur Instagram via l'outil publish_instagram — utilise-le dès que tu as généré une légende et que l'utilisateur fournit une URL d'image
+7. Publier un carrousel multi-images sur Instagram via l'outil publish_instagram_carousel — utilise-le quand l'utilisateur fournit plusieurs URLs d'images (2 à 10 photos)
 
 IMPORTANT : Utilise toujours les outils disponibles pour accéder aux données réelles. Réponds toujours en français.`;
 
@@ -130,6 +131,25 @@ const tools = [
         }
       },
       required: ["image_url", "caption"]
+    }
+  },
+  {
+    name: "publish_instagram_carousel",
+    description: "Publie un carrousel multi-images sur Instagram (2 à 10 photos). Réhéberge automatiquement les images sur Cloudinary avant publication. Utiliser quand l'utilisateur fournit plusieurs URLs d'images pour un même post.",
+    input_schema: {
+      type: "object",
+      properties: {
+        image_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Liste de 2 à 10 URLs publiques des images à inclure dans le carrousel (dans l'ordre souhaité)"
+        },
+        caption: {
+          type: "string",
+          description: "Légende complète du carrousel avec emojis et hashtags, prête à publier"
+        }
+      },
+      required: ["image_urls", "caption"]
     }
   },
   {
@@ -216,6 +236,64 @@ async function executeToolCall(toolName, toolInput) {
         params: { creation_id: container.data.id, access_token: accessToken }
       });
       return { success: true, postId: publish.data.id };
+    }
+    case "publish_instagram_carousel": {
+      const GRAPH_URL = 'https://graph.facebook.com/v19.0';
+      const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+      const userId = process.env.INSTAGRAM_USER_ID;
+      if (!accessToken || !userId) throw new Error('Instagram credentials not configured');
+
+      if (!toolInput.image_urls || toolInput.image_urls.length < 2) {
+        throw new Error('Un carrousel nécessite au moins 2 images');
+      }
+
+      // Réhéberger toutes les images sur Cloudinary
+      console.log(`[claudeService] Carrousel : réhébergement de ${toolInput.image_urls.length} images…`);
+      const finalUrls = await Promise.all(
+        toolInput.image_urls.map(async (url) => {
+          try {
+            return await reHostOnCloudinary(url);
+          } catch (err) {
+            console.error('[claudeService] Cloudinary échoué pour', url, ':', err.message);
+            return url; // fallback URL originale
+          }
+        })
+      );
+
+      // Créer un container pour chaque image
+      const containerIds = [];
+      for (const imageUrl of finalUrls) {
+        const containerRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
+          params: {
+            image_url: imageUrl,
+            is_carousel_item: true,
+            access_token: accessToken
+          }
+        });
+        containerIds.push(containerRes.data.id);
+        console.log('[claudeService] Container créé:', containerRes.data.id);
+      }
+
+      // Créer le container carrousel
+      const carouselRes = await axios.post(`${GRAPH_URL}/${userId}/media`, null, {
+        params: {
+          media_type: 'CAROUSEL',
+          children: containerIds.join(','),
+          caption: toolInput.caption,
+          access_token: accessToken
+        }
+      });
+
+      // Publier le carrousel
+      const publish = await axios.post(`${GRAPH_URL}/${userId}/media_publish`, null, {
+        params: {
+          creation_id: carouselRes.data.id,
+          access_token: accessToken
+        }
+      });
+
+      console.log('[claudeService] Carrousel publié:', publish.data.id);
+      return { success: true, postId: publish.data.id, type: 'carousel', slides: finalUrls.length };
     }
     case "scrape_listing_url":
       return await scrapeService.scrapeUrl(toolInput.url);
