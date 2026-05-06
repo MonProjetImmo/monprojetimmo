@@ -408,7 +408,3 @@ Fournis :
 
 module.exports = { chat, generatePost };
 
-  return await chat([{ role: "user", content: prompt }]);
-}
-
-module.exports = { chat, generatePost };
