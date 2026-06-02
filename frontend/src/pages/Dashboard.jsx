@@ -4,11 +4,13 @@ import Chat from '../components/Chat.jsx';
 import PostGenerator from '../components/PostGenerator.jsx';
 import EditorialCalendar from '../components/EditorialCalendar.jsx';
 import Preview from '../components/Preview.jsx';
+import PhotoEnhancer from '../components/PhotoEnhancer.jsx';
 
 const TABS = [
-  { id: 'chat', label: 'Agent IA', icon: '💬' },
-  { id: 'generate', label: 'Générateur', icon: '✍️' },
-  { id: 'calendar', label: 'Calendrier', icon: '📅' },
+  { id: 'chat',    label: 'Agent IA',        icon: '💬' },
+  { id: 'generate', label: 'Générateur',     icon: '✍️' },
+  { id: 'photos',  label: 'Photos',          icon: '🖼️' },
+  { id: 'calendar', label: 'Calendrier',     icon: '📅' },
   { id: 'preview', label: 'Prévisualisation', icon: '👁️' }
 ];
 
@@ -66,10 +68,11 @@ export default function Dashboard() {
 
       {/* Main content */}
       <main style={styles.main}>
-        {activeTab === 'chat' && <Chat />}
+        {activeTab === 'chat'     && <Chat />}
         {activeTab === 'generate' && <PostGenerator onPreview={handlePreview} />}
+        {activeTab === 'photos'   && <PhotoEnhancer />}
         {activeTab === 'calendar' && <EditorialCalendar />}
-        {activeTab === 'preview' && <Preview post={previewPost} />}
+        {activeTab === 'preview'  && <Preview post={previewPost} />}
       </main>
     </div>
   );

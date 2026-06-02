@@ -45,11 +45,11 @@ Full-stack Node.js + React app. No test suite is currently configured.
 
 ### Frontend (`frontend/`) — React 18 + Vite, port 5173
 
-- **`src/api/index.js`** — single axios instance; reads `VITE_API_URL` env var (falls back to `/api`); handles 401 → redirect to `/login` globally; exports `authAPI`, `agentAPI`, `postsAPI`, `publishAPI`, `calendarAPI`
+- **`src/api/index.js`** — single axios instance; reads `VITE_API_URL` env var (falls back to `/api`); handles 401 → redirect to `/login` globally; exports `authAPI`, `agentAPI`, `postsAPI`, `publishAPI`, `photosAPI`, `calendarAPI`
 - **`src/contexts/AuthContext.jsx`** — JWT stored in `localStorage`; provides `user`, `loading`, `login`, `logout`
 - **`src/App.jsx`** — BrowserRouter with a `PrivateRoute` wrapper; only two pages: `/login` and `/` (Dashboard)
-- **`src/pages/Dashboard.jsx`** — tab-based shell hosting the four feature panels
-- **`src/components/`** — `Chat.jsx` (agent Alex), `PostGenerator.jsx`, `EditorialCalendar.jsx`, `Preview.jsx`
+- **`src/pages/Dashboard.jsx`** — tab-based shell hosting five feature panels (Chat, Générateur, Photos, Calendrier, Prévisualisation)
+- **`src/components/`** — `Chat.jsx` (agent Alex), `PostGenerator.jsx`, `PhotoEnhancer.jsx`, `EditorialCalendar.jsx`, `Preview.jsx`
 
 ### AI agent tools
 
@@ -63,6 +63,23 @@ The agent (Alex) has four tools declared in `claudeService.js`:
 | `scrape_listing_url` | Scrapes a listing URL and returns structured property data |
 
 There is also a separate `POST /api/publish/instagram` route that forwards to a **Make.com webhook** — this is a second, independent Instagram publishing path distinct from the tool above.
+
+### Photo enhancement (`PhotoEnhancer`)
+
+The **Photos** tab (`src/components/PhotoEnhancer.jsx`) implements a human-review gate before publication:
+
+1. **Upload** — browser uploads directly to Cloudinary via the unsigned preset `monprojetimmo` (no backend involved). `POST https://api.cloudinary.com/v1_1/dwqbtroxk/image/upload`
+2. **Before/After** — two URLs are derived client-side from `secureUrl` by inserting transforms after `/upload/`:
+   - Before (crop only): `c_fill,w_1080,h_1080`
+   - After (enhanced): `e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`
+3. **Validation** — user approves or rejects each image; only approved images proceed.
+4. **Publish** — calls `POST /api/photos/publish` with the *after* URL, which forwards to the Make webhook.
+
+**Transform rules:**
+- `e_improve:indoor:50` — standard Cloudinary effect, blend=50 for moderate result (avoids over-saturation). `indoor` mode is suited to real-estate interiors.
+- Do **not** add `e_upscale` or `e_enhance` — these consume generative quota and can block the account.
+- The 1:1 crop (`c_fill,w_1080,h_1080`) satisfies the Instagram Graph API aspect-ratio requirement (4:5 to 1.91:1).
+- If an image URL already contains `res.cloudinary.com`, skip re-upload and apply transforms directly.
 
 ### Deployment
 

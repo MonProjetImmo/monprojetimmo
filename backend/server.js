@@ -7,6 +7,7 @@ const agentRoutes = require('./routes/agent');
 const postsRoutes = require('./routes/posts');
 const calendarRoutes = require('./routes/calendar');
 const publishRouter = require('./routes/publish');
+const photosRouter = require('./routes/photos');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/posts', postsRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/publish', publishRouter);
+app.use('/api/photos', photosRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mon Projet Immo API is running', timestamp: new Date().toISOString() });
