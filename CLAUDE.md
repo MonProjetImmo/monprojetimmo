@@ -36,7 +36,7 @@ Full-stack Node.js + React app. No test suite is currently configured.
 ### Backend (`backend/`) — Express, port 3001
 
 - **`server.js`** — entry point; mounts all routers under `/api/`
-- **`routes/`** — one file per feature: `auth.js`, `agent.js`, `posts.js`, `calendar.js`, `publish.js`
+- **`routes/`** — one file per feature: `auth.js`, `agent.js`, `posts.js`, `calendar.js`, `publish.js`. **`publish.js` is the sole Instagram publication path** (Make webhook); do not create alternative publish routes.
 - **`services/claudeService.js`** — core AI logic; calls `claude-opus-4-7` with extended thinking (`"adaptive"`), prompt caching on the system prompt, and an agentic tool-use loop that runs until `stop_reason === "end_turn"`
 - **`services/googleSheetsService.js`** — read/write to the editorial calendar Google Sheet via a service account
 - **`services/scrapeService.js`** — HTML scraping of real-estate listing URLs (SeLoger, LeBonCoin, PAP…) using cheerio
@@ -45,7 +45,7 @@ Full-stack Node.js + React app. No test suite is currently configured.
 
 ### Frontend (`frontend/`) — React 18 + Vite, port 5173
 
-- **`src/api/index.js`** — single axios instance; reads `VITE_API_URL` env var (falls back to `/api`); handles 401 → redirect to `/login` globally; exports `authAPI`, `agentAPI`, `postsAPI`, `publishAPI`, `photosAPI`, `calendarAPI`
+- **`src/api/index.js`** — single axios instance; reads `VITE_API_URL` env var (falls back to `/api`); handles 401 → redirect to `/login` globally; exports `authAPI`, `agentAPI`, `postsAPI`, `publishAPI`, `calendarAPI`
 - **`src/contexts/AuthContext.jsx`** — JWT stored in `localStorage`; provides `user`, `loading`, `login`, `logout`
 - **`src/App.jsx`** — BrowserRouter with a `PrivateRoute` wrapper; only two pages: `/login` and `/` (Dashboard)
 - **`src/pages/Dashboard.jsx`** — tab-based shell hosting five feature panels (Chat, Générateur, Photos, Calendrier, Prévisualisation)
@@ -64,25 +64,23 @@ The agent (Alex) has four tools declared in `claudeService.js`:
 
 There is also a separate `POST /api/publish/instagram` route that forwards to a **Make.com webhook** — this is a second, independent Instagram publishing path distinct from the tool above.
 
-### Photo enhancement (`PhotoEnhancer`)
+### Onglet Photos — optimiseur pur (`PhotoEnhancer`)
 
-The **Photos** tab (`src/components/PhotoEnhancer.jsx`) implements a human-review gate before publication:
+L'onglet **Photos** est un **optimiseur + téléchargeur uniquement** — il ne publie pas. La publication passe exclusivement par l'agent Alex (`routes/publish.js` → webhook Make).
 
-1. **Upload** — browser uploads directly to Cloudinary via the unsigned preset `monprojetimmo` (no backend involved). `POST https://api.cloudinary.com/v1_1/dwqbtroxk/image/upload`
-2. **Before/After** — two URLs are derived client-side from `secureUrl` by inserting transforms after `/upload/`:
-   - Before (crop only): `c_fill,w_1080,h_1080`
-   - After (enhanced): `e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`
-3. **Validation** — user approves or rejects each image; only approved images proceed.
-4. **Publish** — calls `POST /api/photos/publish` with the *after* URL, which forwards to the Make webhook.
+Flux : upload Cloudinary → aperçu avant/après → validation image par image → téléchargement de la version optimisée.
 
-**Transform rules:**
-- `e_improve:indoor:50` — standard Cloudinary effect, blend=50 for moderate result (avoids over-saturation). `indoor` mode is suited to real-estate interiors.
-- Do **not** add `e_upscale` or `e_enhance` — these consume generative quota and can block the account.
-- The 1:1 crop (`c_fill,w_1080,h_1080`) satisfies the Instagram Graph API aspect-ratio requirement (4:5 to 1.91:1).
-- If an image URL already contains `res.cloudinary.com`, skip re-upload and apply transforms directly.
+1. **Upload** — le navigateur envoie directement à Cloudinary via le preset unsigned `monprojetimmo`. Aucun backend impliqué. `POST https://api.cloudinary.com/v1_1/dwqbtroxk/image/upload`
+2. **Before/After** — deux URLs dérivées client-side en insérant les transformations après `/upload/` :
+   - Avant (crop seul) : `c_fill,w_1080,h_1080`
+   - Après (améliorée) : `e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`
+3. **Validation** — l'utilisateur valide ou rejette chaque image.
+4. **Téléchargement** — bouton **"⬇ Télécharger optimisée"** sur chaque image validée. Utilise `fl_attachment:<slug>` comme première étape Cloudinary : le navigateur reçoit `Content-Disposition: attachment` et télécharge sans `fetch` ni CORS. Slug = nom sanitizé suffixé `-optimisee` (ex. `cuisine 1.png` → `cuisine-1-optimisee.jpg`). Chaîne complète : `fl_attachment:<slug>/e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`. Aucun asset dérivé stocké.
 
-**Download button (validated images):**
-Each validated image card shows a **"⬇ Télécharger optimisée"** link. It uses `fl_attachment:<slug>` as the first transformation step, which instructs Cloudinary to serve the file with `Content-Disposition: attachment` — the browser downloads it directly without any `fetch`/CORS issue. The slug is the sanitized filename suffixed with `-optimisee` (e.g., `cuisine 1.png` → `cuisine-1-optimisee`). The full transform chain in the download URL is `fl_attachment:<slug>/e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`. No new asset is stored; this is a delivery transformation only.
+**Règles de transformation :**
+- `e_improve:indoor:50` — effet standard Cloudinary, blend=50 pour éviter la sur-saturation. Mode `indoor` adapté aux intérieurs immobiliers.
+- Ne **pas** utiliser `e_upscale` ni `e_enhance` — ces effets consomment du quota génératif et peuvent bloquer le compte.
+- Le crop 1:1 (`c_fill,w_1080,h_1080`) satisfait les contraintes de ratio de l'API Graph Instagram (4:5 à 1.91:1).
 
 ### Deployment
 

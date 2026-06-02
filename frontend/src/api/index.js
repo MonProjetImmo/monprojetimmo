@@ -38,10 +38,6 @@ export const publishAPI = {
   instagram: (imageUrl, caption) => api.post('/publish/instagram', { imageUrl, caption })
 };
 
-export const photosAPI = {
-  publish: (imageUrl, caption) => api.post('/photos/publish', { imageUrl, caption })
-};
-
 export const calendarAPI = {
   getAll: () => api.get('/calendar'),
   create: (entry) => api.post('/calendar', entry),

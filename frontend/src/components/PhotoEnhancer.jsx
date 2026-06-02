@@ -1,10 +1,9 @@
 import React, { useState, useRef, useCallback, useId } from 'react';
-import { photosAPI } from '../api/index.js';
 
 // ─── Cloudinary config ────────────────────────────────────────────────────────
-const CLOUD_NAME   = 'dwqbtroxk';
+const CLOUD_NAME    = 'dwqbtroxk';
 const UPLOAD_PRESET = 'monprojetimmo';
-const UPLOAD_URL   = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+const UPLOAD_URL    = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
 
 // blend=50 : amélioration modérée — évite l'effet sur-saturé
 const ENHANCE_STEPS = 'e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto';
@@ -181,19 +180,16 @@ function ImageCard({ image, onValidate, onReject, onReset }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PhotoEnhancer() {
-  const [images, setImages]           = useState([]);
-  const [dragging, setDragging]       = useState(false);
-  const [caption, setCaption]         = useState('');
-  const [publishTarget, setPublishTarget] = useState(null); // image id being published
-  const [publishResults, setPublishResults] = useState({}); // { [id]: { ok, message } }
+  const [images, setImages] = useState([]);
+  const [dragging, setDragging] = useState(false);
 
   const fileInputRef = useRef(null);
   const dropZoneId   = useId();
 
   // ── drag & drop ──────────────────────────────────────────────────────────
-  const handleDragOver = useCallback((e) => { e.preventDefault(); setDragging(true); }, []);
+  const handleDragOver  = useCallback((e) => { e.preventDefault(); setDragging(true); }, []);
   const handleDragLeave = useCallback(() => setDragging(false), []);
-  const handleDrop = useCallback((e) => {
+  const handleDrop      = useCallback((e) => {
     e.preventDefault();
     setDragging(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
@@ -246,41 +242,17 @@ export default function PhotoEnhancer() {
   const setValidation = (id, value) =>
     setImages(prev => prev.map(x => x.id === id ? { ...x, validation: value } : x));
 
-  // ── publish single image ─────────────────────────────────────────────────
-  async function handlePublish(image) {
-    if (!caption.trim()) return;
-    setPublishTarget(image.id);
-    setPublishResults(prev => ({ ...prev, [image.id]: null }));
-
-    try {
-      await photosAPI.publish(buildAfterUrl(image.secureUrl), caption.trim());
-      setPublishResults(prev => ({
-        ...prev,
-        [image.id]: { ok: true, message: 'Publié sur Instagram ✓' }
-      }));
-    } catch (err) {
-      const msg = err.response?.data?.detail || err.response?.data?.error || err.message;
-      setPublishResults(prev => ({
-        ...prev,
-        [image.id]: { ok: false, message: msg }
-      }));
-    } finally {
-      setPublishTarget(null);
-    }
-  }
-
   // ── derived state ─────────────────────────────────────────────────────────
-  const approvedImages = images.filter(x => x.validation === 'approved' && x.secureUrl);
-  const pendingCount   = images.filter(x => x.status === 'uploading').length;
-  const hasAny         = images.length > 0;
+  const pendingCount = images.filter(x => x.status === 'uploading').length;
+  const hasAny       = images.length > 0;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={s.page}>
       <header style={s.pageHeader}>
-        <h1 style={s.title}>Auto-améliorer les photos</h1>
+        <h1 style={s.title}>Optimiser les photos</h1>
         <p style={s.subtitle}>
-          Uploadez, comparez avant/après, validez image par image — puis publiez.
+          Uploadez, comparez avant/après, validez, puis téléchargez la version optimisée.
         </p>
       </header>
 
@@ -339,89 +311,6 @@ export default function PhotoEnhancer() {
               />
             ))}
           </div>
-        </section>
-      )}
-
-      {/* ── Publish panel ── */}
-      {approvedImages.length > 0 && (
-        <section style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>
-              Publication
-              <span style={{ ...s.countBadge, background: '#dcfce7', color: '#15803d' }}>
-                {approvedImages.length} validée{approvedImages.length > 1 ? 's' : ''}
-              </span>
-            </h2>
-            <p style={s.sectionSub}>
-              Chaque image validée sera publiée avec la transformation améliorée{' '}
-              <code style={s.code}>e_improve:indoor:50 · c_fill · 1080×1080 · q_auto</code>.
-            </p>
-          </div>
-
-          {/* Caption */}
-          <div className="form-group" style={{ maxWidth: 680 }}>
-            <label>Légende (commune à toutes les images)</label>
-            <textarea
-              className="form-control"
-              value={caption}
-              onChange={e => setCaption(e.target.value)}
-              placeholder="Rédigez votre légende Instagram avec hashtags…"
-              rows={4}
-            />
-          </div>
-
-          {/* One publish button per approved image */}
-          <div style={s.publishList}>
-            {approvedImages.map(img => {
-              const result  = publishResults[img.id];
-              const loading = publishTarget === img.id;
-
-              return (
-                <div key={img.id} style={s.publishRow}>
-                  <img
-                    src={buildAfterUrl(img.secureUrl)}
-                    alt={img.name}
-                    style={s.publishThumb}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <p style={s.publishName}>{img.name}</p>
-                    <p style={s.publishUrlPreview} title={buildAfterUrl(img.secureUrl)}>
-                      {buildAfterUrl(img.secureUrl).slice(0, 72)}…
-                    </p>
-                    {result && (
-                      <p style={{
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        color: result.ok ? '#15803d' : '#b91c1c',
-                        marginTop: 4
-                      }}>
-                        {result.message}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handlePublish(img)}
-                    disabled={loading || !caption.trim() || result?.ok}
-                    className="btn btn-sm"
-                    style={{
-                      background: result?.ok ? '#22c55e' : '#e1306c',
-                      color: '#fff',
-                      border: 'none',
-                      flexShrink: 0
-                    }}
-                  >
-                    {loading ? 'Publication…' : result?.ok ? 'Publié ✓' : 'Publier sur Instagram'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {!caption.trim() && (
-            <p style={{ fontSize: '0.82rem', color: '#9aa3bc', marginTop: 8 }}>
-              ↑ Rédigez une légende pour activer la publication.
-            </p>
-          )}
         </section>
       )}
     </div>
@@ -606,50 +495,5 @@ const s = {
   actionRow: {
     display: 'flex',
     gap: 8
-  },
-
-  // Publish section
-  publishList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12
-  },
-  publishRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    background: '#fff',
-    border: '2px solid #e2e6f0',
-    borderRadius: 12,
-    padding: '12px 16px'
-  },
-  publishThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    objectFit: 'cover',
-    flexShrink: 0
-  },
-  publishName: {
-    fontSize: '0.88rem',
-    fontWeight: 600,
-    color: '#1a2744'
-  },
-  publishUrlPreview: {
-    fontSize: '0.72rem',
-    color: '#9aa3bc',
-    fontFamily: 'monospace',
-    marginTop: 2,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  code: {
-    background: '#f0f2f7',
-    borderRadius: 4,
-    padding: '1px 6px',
-    fontSize: '0.78rem',
-    fontFamily: 'monospace',
-    color: '#5a6380'
   }
 };
