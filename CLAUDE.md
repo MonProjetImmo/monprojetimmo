@@ -81,6 +81,9 @@ The **Photos** tab (`src/components/PhotoEnhancer.jsx`) implements a human-revie
 - The 1:1 crop (`c_fill,w_1080,h_1080`) satisfies the Instagram Graph API aspect-ratio requirement (4:5 to 1.91:1).
 - If an image URL already contains `res.cloudinary.com`, skip re-upload and apply transforms directly.
 
+**Download button (validated images):**
+Each validated image card shows a **"⬇ Télécharger optimisée"** link. It uses `fl_attachment:<slug>` as the first transformation step, which instructs Cloudinary to serve the file with `Content-Disposition: attachment` — the browser downloads it directly without any `fetch`/CORS issue. The slug is the sanitized filename suffixed with `-optimisee` (e.g., `cuisine 1.png` → `cuisine-1-optimisee`). The full transform chain in the download URL is `fl_attachment:<slug>/e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`. No new asset is stored; this is a delivery transformation only.
+
 ### Deployment
 
 `vercel.json` configures Vercel for the frontend: static SPA with `/api/*` proxied to the Railway backend (`monprojetimmo-production.up.railway.app`). The backend is deployed separately on Railway.

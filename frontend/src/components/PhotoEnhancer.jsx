@@ -22,6 +22,20 @@ function buildAfterUrl(secureUrl) {
   return insertTransform(secureUrl, ENHANCE_STEPS);
 }
 
+// Construit l'URL de téléchargement : fl_attachment force le Content-Disposition
+// "attachment" côté Cloudinary, ce qui déclenche le download sans problème CORS.
+// Le nom dans fl_attachment:slug est utilisé par Cloudinary comme nom de fichier.
+function buildDownloadUrl(secureUrl, originalName) {
+  const slug = originalName
+    .replace(/\.[^/.]+$/, '')          // retire l'extension
+    .replace(/[^a-zA-Z0-9]+/g, '-')   // remplace tout ce qui n'est pas alphanum
+    .replace(/^-+|-+$/g, '')           // trim les tirets en début/fin
+    .toLowerCase();
+  const dlName = `${slug}-optimisee`;
+  // Ordre : fl_attachment en premier, puis les étapes d'amélioration
+  return secureUrl.replace('/upload/', `/upload/fl_attachment:${dlName}/${ENHANCE_STEPS}/`);
+}
+
 // ─── Upload helpers ───────────────────────────────────────────────────────────
 function uploadToCloudinary(file, onProgress) {
   return new Promise((resolve, reject) => {
@@ -137,7 +151,23 @@ function ImageCard({ image, onValidate, onReject, onReset }) {
                 </button>
               </>
             )}
-            {(isApproved || isRejected) && (
+            {isApproved && (
+              <>
+                <a
+                  href={buildDownloadUrl(image.secureUrl, image.name)}
+                  className="btn btn-primary btn-sm"
+                  style={{ flex: 1, justifyContent: 'center', textDecoration: 'none' }}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  ⬇ Télécharger optimisée
+                </a>
+                <button onClick={onReset} className="btn btn-outline btn-sm">
+                  Modifier
+                </button>
+              </>
+            )}
+            {isRejected && (
               <button onClick={onReset} className="btn btn-outline btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 Modifier le choix
               </button>
