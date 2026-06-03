@@ -1,13 +1,16 @@
 import React, { useState, useRef, useCallback, useId } from 'react';
 
 // ─── Cloudinary config ────────────────────────────────────────────────────────
-const CLOUD_NAME    = 'dwqbtroxk';
-const UPLOAD_PRESET = 'monprojetimmo';
-const UPLOAD_URL    = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+const CLOUD_NAME      = 'dwqbtroxk';
+const UPLOAD_PRESET   = 'monprojetimmo';
+const UPLOAD_URL      = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+const CROP_STEPS      = 'c_fill,w_1080,h_1080';
+const DEFAULT_INTENSITY = 50; // blend e_improve (0 = aucun effet, 100 = max)
 
-// blend=50 : amélioration modérée — évite l'effet sur-saturé
-const ENHANCE_STEPS = 'e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto';
-const CROP_STEPS    = 'c_fill,w_1080,h_1080';
+// Chaîne d'amélioration paramétrée par l'intensité (blend d'e_improve:indoor)
+function enhanceSteps(intensity) {
+  return `e_improve:indoor:${intensity}/c_fill,w_1080,h_1080,q_auto`;
+}
 
 function insertTransform(secureUrl, transform) {
   return secureUrl.replace('/upload/', `/upload/${transform}/`);
@@ -17,22 +20,23 @@ function buildBeforeUrl(secureUrl) {
   return insertTransform(secureUrl, CROP_STEPS);
 }
 
-function buildAfterUrl(secureUrl) {
-  return insertTransform(secureUrl, ENHANCE_STEPS);
+function buildAfterUrl(secureUrl, intensity) {
+  return insertTransform(secureUrl, enhanceSteps(intensity));
 }
 
 // Construit l'URL de téléchargement : fl_attachment force le Content-Disposition
 // "attachment" côté Cloudinary, ce qui déclenche le download sans problème CORS.
 // Le nom dans fl_attachment:slug est utilisé par Cloudinary comme nom de fichier.
-function buildDownloadUrl(secureUrl, originalName) {
+// L'intensité choisie est intégrée dans la chaîne — le fichier téléchargé correspond
+// exactement à ce que l'utilisateur voit à l'écran.
+function buildDownloadUrl(secureUrl, originalName, intensity) {
   const slug = originalName
     .replace(/\.[^/.]+$/, '')          // retire l'extension
     .replace(/[^a-zA-Z0-9]+/g, '-')   // remplace tout ce qui n'est pas alphanum
     .replace(/^-+|-+$/g, '')           // trim les tirets en début/fin
     .toLowerCase();
   const dlName = `${slug}-optimisee`;
-  // Ordre : fl_attachment en premier, puis les étapes d'amélioration
-  return secureUrl.replace('/upload/', `/upload/fl_attachment:${dlName}/${ENHANCE_STEPS}/`);
+  return secureUrl.replace('/upload/', `/upload/fl_attachment:${dlName}/${enhanceSteps(intensity)}/`);
 }
 
 // ─── Upload helpers ───────────────────────────────────────────────────────────
@@ -65,17 +69,35 @@ function uploadToCloudinary(file, onProgress) {
 }
 
 // ─── Single image card ─────────────────────────────────────────────────────
-function ImageCard({ image, onValidate, onReject, onReset }) {
+function ImageCard({ image, onValidate, onReject, onReset, onIntensityChange }) {
   const [view, setView] = useState('after');
+  // sliderDisplay suit le pouce en temps réel (affichage uniquement).
+  // image.intensity est la valeur engagée, utilisée pour construire l'URL.
+  const [sliderDisplay, setSliderDisplay] = useState(image.intensity);
 
   const beforeUrl  = image.secureUrl ? buildBeforeUrl(image.secureUrl) : null;
-  const afterUrl   = image.secureUrl ? buildAfterUrl(image.secureUrl)  : null;
+  // afterUrl est recalculée à partir de image.intensity (valeur engagée, pas sliderDisplay)
+  const afterUrl   = image.secureUrl ? buildAfterUrl(image.secureUrl, image.intensity) : null;
   const displayUrl = view === 'before' ? beforeUrl : afterUrl;
 
   const isUploading = image.status === 'uploading';
   const hasError    = image.status === 'error';
   const isApproved  = image.validation === 'approved';
   const isRejected  = image.validation === 'rejected';
+
+  // Pendant le glissement : met à jour l'affichage du chiffre uniquement,
+  // sans reconstruire l'URL (pas de requête Cloudinary à chaque pixel).
+  function handleSliderInput(e) {
+    setSliderDisplay(Number(e.target.value));
+  }
+
+  // Au relâchement : engage la valeur → déclenche la reconstruction de l'URL
+  // et donc le rechargement de l'aperçu.
+  function handleSliderCommit(e) {
+    const val = Number(e.target.value);
+    setSliderDisplay(val);
+    onIntensityChange(val);
+  }
 
   return (
     <div style={{
@@ -111,7 +133,7 @@ function ImageCard({ image, onValidate, onReject, onReset }) {
         </div>
       )}
 
-      {/* Before / After toggle + image */}
+      {/* Before / After toggle + image + curseur */}
       {image.secureUrl && (
         <>
           <div style={s.toggleRow}>
@@ -140,6 +162,23 @@ function ImageCard({ image, onValidate, onReject, onReset }) {
             <span style={s.imgLabel}>{view === 'before' ? 'Original recadré' : 'Amélioré · 1080×1080'}</span>
           </div>
 
+          {/* Curseur d'intensité — visible quelle que soit la vue */}
+          <div style={s.sliderRow}>
+            <span style={s.sliderLabel}>Intensité</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={sliderDisplay}
+              onChange={handleSliderInput}
+              onMouseUp={handleSliderCommit}
+              onTouchEnd={handleSliderCommit}
+              style={s.slider}
+              aria-label="Intensité de l'amélioration"
+            />
+            <span style={s.sliderValue}>{sliderDisplay}</span>
+          </div>
+
           {/* Action buttons */}
           <div style={s.actionRow}>
             {!isApproved && !isRejected && (
@@ -153,7 +192,7 @@ function ImageCard({ image, onValidate, onReject, onReset }) {
             {isApproved && (
               <>
                 <a
-                  href={buildDownloadUrl(image.secureUrl, image.name)}
+                  href={buildDownloadUrl(image.secureUrl, image.name, image.intensity)}
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center', textDecoration: 'none' }}
                   target="_blank"
@@ -212,6 +251,7 @@ export default function PhotoEnhancer() {
       progress:   0,
       secureUrl:  null,
       validation: 'pending',
+      intensity:  DEFAULT_INTENSITY, // intensité initiale par image
       error:      null
     }));
 
@@ -242,6 +282,10 @@ export default function PhotoEnhancer() {
   const setValidation = (id, value) =>
     setImages(prev => prev.map(x => x.id === id ? { ...x, validation: value } : x));
 
+  // ── intensité par image (engagée au relâchement du curseur) ───────────────
+  const setIntensity = (id, value) =>
+    setImages(prev => prev.map(x => x.id === id ? { ...x, intensity: value } : x));
+
   // ── derived state ─────────────────────────────────────────────────────────
   const pendingCount = images.filter(x => x.status === 'uploading').length;
   const hasAny       = images.length > 0;
@@ -252,7 +296,7 @@ export default function PhotoEnhancer() {
       <header style={s.pageHeader}>
         <h1 style={s.title}>Optimiser les photos</h1>
         <p style={s.subtitle}>
-          Uploadez, comparez avant/après, validez, puis téléchargez la version optimisée.
+          Uploadez, comparez avant/après, ajustez l'intensité, validez, puis téléchargez.
         </p>
       </header>
 
@@ -296,7 +340,7 @@ export default function PhotoEnhancer() {
               <span style={s.countBadge}>{images.length}</span>
             </h2>
             <p style={s.sectionSub}>
-              Basculez entre Avant et Après sur chaque photo pour comparer, puis validez ou rejetez.
+              Ajustez l'intensité, basculez Avant/Après pour comparer, puis validez ou rejetez.
             </p>
           </div>
 
@@ -308,6 +352,7 @@ export default function PhotoEnhancer() {
                 onValidate={() => setValidation(img.id, 'approved')}
                 onReject={() => setValidation(img.id, 'rejected')}
                 onReset={() => setValidation(img.id, 'pending')}
+                onIntensityChange={(val) => setIntensity(img.id, val)}
               />
             ))}
           </div>
@@ -489,6 +534,34 @@ const s = {
     fontWeight: 600,
     padding: '3px 8px',
     borderRadius: 6
+  },
+
+  // Intensity slider
+  sliderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10
+  },
+  sliderLabel: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#9aa3bc',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    flexShrink: 0
+  },
+  slider: {
+    flex: 1,
+    accentColor: '#c9a84c',
+    cursor: 'pointer',
+    height: 4
+  },
+  sliderValue: {
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: '#1a2744',
+    minWidth: 24,
+    textAlign: 'right'
   },
 
   // Action row

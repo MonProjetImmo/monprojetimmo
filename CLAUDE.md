@@ -68,17 +68,18 @@ There is also a separate `POST /api/publish/instagram` route that forwards to a 
 
 L'onglet **Photos** est un **optimiseur + téléchargeur uniquement** — il ne publie pas. La publication passe exclusivement par l'agent Alex (`routes/publish.js` → webhook Make).
 
-Flux : upload Cloudinary → aperçu avant/après → validation image par image → téléchargement de la version optimisée.
+Flux : upload Cloudinary → réglage de l'intensité → aperçu avant/après → validation image par image → téléchargement de la version optimisée.
 
 1. **Upload** — le navigateur envoie directement à Cloudinary via le preset unsigned `monprojetimmo`. Aucun backend impliqué. `POST https://api.cloudinary.com/v1_1/dwqbtroxk/image/upload`
 2. **Before/After** — deux URLs dérivées client-side en insérant les transformations après `/upload/` :
    - Avant (crop seul) : `c_fill,w_1080,h_1080`
-   - Après (améliorée) : `e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`
-3. **Validation** — l'utilisateur valide ou rejette chaque image.
-4. **Téléchargement** — bouton **"⬇ Télécharger optimisée"** sur chaque image validée. Utilise `fl_attachment:<slug>` comme première étape Cloudinary : le navigateur reçoit `Content-Disposition: attachment` et télécharge sans `fetch` ni CORS. Slug = nom sanitizé suffixé `-optimisee` (ex. `cuisine 1.png` → `cuisine-1-optimisee.jpg`). Chaîne complète : `fl_attachment:<slug>/e_improve:indoor:50/c_fill,w_1080,h_1080,q_auto`. Aucun asset dérivé stocké.
+   - Après (améliorée) : `e_improve:indoor:<intensity>/c_fill,w_1080,h_1080,q_auto`
+3. **Curseur d'intensité** — chaque image possède sa propre valeur `intensity` (0–100, défaut 50), qui correspond au paramètre `blend` d'`e_improve`. La valeur est stockée dans l'état parent (`image.intensity`). Pendant le glissement, seul le chiffre s'actualise (`sliderDisplay` local à `ImageCard`) — l'URL n'est reconstruite qu'au relâchement (`onMouseUp` / `onTouchEnd`), pour éviter des dizaines de requêtes Cloudinary inutiles. La chaîne est construite par `enhanceSteps(intensity)`.
+4. **Validation** — l'utilisateur valide ou rejette chaque image.
+5. **Téléchargement** — bouton **"⬇ Télécharger optimisée"** sur chaque image validée. Utilise `fl_attachment:<slug>` comme première étape Cloudinary : le navigateur reçoit `Content-Disposition: attachment` et télécharge sans `fetch` ni CORS. Slug = nom sanitizé suffixé `-optimisee` (ex. `cuisine 1.png` → `cuisine-1-optimisee.jpg`). L'URL de téléchargement intègre l'intensité choisie — le fichier correspond exactement à l'aperçu. Aucun asset dérivé stocké.
 
 **Règles de transformation :**
-- `e_improve:indoor:50` — effet standard Cloudinary, blend=50 pour éviter la sur-saturation. Mode `indoor` adapté aux intérieurs immobiliers.
+- `e_improve:indoor:<intensity>` — effet standard Cloudinary. `indoor` adapté aux intérieurs immobiliers. `intensity` = blend (0 = aucun effet, 100 = max). Défaut 50 pour éviter la sur-saturation.
 - Ne **pas** utiliser `e_upscale` ni `e_enhance` — ces effets consomment du quota génératif et peuvent bloquer le compte.
 - Le crop 1:1 (`c_fill,w_1080,h_1080`) satisfait les contraintes de ratio de l'API Graph Instagram (4:5 à 1.91:1).
 
